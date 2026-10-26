@@ -1,7 +1,8 @@
 """Tencent TokenHub provider profile (OpenAI-compatible, tokenhub.tencentmaas.com).
 
-Request quirk: top-level ``reasoning_effort``, clamped to TokenHub's low/medium/high and omitted
-when thinking is off; a main-loop turn with no configured effort sends ``high``.
+Request quirk: top-level ``reasoning_effort``, clamped to the model's supported set (TokenHub's
+low/medium/high, narrowed to ``high`` alone on the Hy4 generation) and omitted when thinking is
+off; a main-loop turn with no configured effort sends ``high``.
 
 Endpoint, ``TOKENHUB_API_KEY``, aliases and the static Hy model list stay in
 ``hermes_cli/auth.py`` / ``hermes_cli/models_catalog_static.py``. ``base_url`` is left empty so
@@ -25,13 +26,13 @@ class TokenHubProfile(ProviderProfile):
         return {"enabled": True, "effort": "high"}
 
     def build_api_kwargs_extras(
-        self, *, reasoning_config: dict | None = None, **context: Any,
+        self, *, reasoning_config: dict | None = None, model: str | None = None, **context: Any,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         # No config (an auxiliary call with no effort configured): send nothing. Main-loop turns
         # reach here with ``default_reasoning_config`` filled in.
         if not reasoning_config or not isinstance(reasoning_config, dict) or reasoning_config.get("enabled") is False:
             return {}, {}
-        return {}, {"reasoning_effort": tokenhub_effort(requested_effort(reasoning_config))}
+        return {}, {"reasoning_effort": tokenhub_effort(requested_effort(reasoning_config), model)}
 
 
 register_provider(TokenHubProfile(

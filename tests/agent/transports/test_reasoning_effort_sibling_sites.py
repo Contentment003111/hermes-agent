@@ -11,7 +11,8 @@ sibling sites fixed in the same sweep:
   WEAKER than an explicit high (ladder inversion).
 - Tencent TokenHub: accepts low/medium/high; upper-ladder levels previously
   dropped to the "high" default (accidentally right) but "minimal" also
-  dropped to high — asked for the least, got the most.
+  dropped to high — asked for the least, got the most. The Hy4 generation
+  narrows that set to "high" alone.
 - Codex/Responses transport: ultra → max for EVERY model, not just gpt-5.6.
 """
 
@@ -83,9 +84,9 @@ class TestKimiEffortVocabulary:
 
 
 class TestTokenHubEffortVocabulary:
-    def _kwargs(self, reasoning_config):
+    def _kwargs(self, reasoning_config, model="hunyuan-t2"):
         return _cc().build_kwargs(
-            model="hunyuan-t2",
+            model=model,
             messages=[{"role": "user", "content": "hi"}],
             is_tokenhub=True,
             reasoning_config=reasoning_config,
@@ -106,6 +107,48 @@ class TestTokenHubEffortVocabulary:
         for level in ("low", "medium", "high"):
             kw = self._kwargs({"enabled": True, "effort": level})
             assert kw["reasoning_effort"] == level
+
+
+class TestTokenHubHy4EffortVocabulary:
+    """Stable Hy4 publishes ``high`` + ``max``; Hy4 preview stops at ``high``. The wider Hy3-era
+    ladder (low/medium) would 400 on this generation, and handing preview the ``max`` rung its
+    API rejects is the prefix-matching trap this pins."""
+
+    def _effort(self, model, level):
+        return _cc().build_kwargs(
+            model=model,
+            messages=[{"role": "user", "content": "hi"}],
+            is_tokenhub=True,
+            reasoning_config={"enabled": True, "effort": level},
+        )["reasoning_effort"]
+
+    def test_stable_hy4_keeps_the_max_rung(self):
+        for model in ("hy4", "tencent/hy4"):
+            for level in ("max", "ultra"):
+                assert self._effort(model, level) == "max", (model, level)
+            for level in ("minimal", "low", "medium", "high", "xhigh"):
+                assert self._effort(model, level) == "high", (model, level)
+
+    def test_preview_never_gets_the_max_rung(self):
+        """hy4-preview's documented set stops at high — a bare 'hy4' prefix match would
+        send it a 'max' the API rejects."""
+        for model in ("hy4-preview", "tencent/hy4-preview"):
+            for level in ("minimal", "low", "medium", "high", "xhigh", "max", "ultra"):
+                assert self._effort(model, level) == "high", (model, level)
+
+    def test_hy3_keeps_the_wider_ladder(self):
+        """The narrowing is Hy4-only: Hy3 still accepts low/medium/high."""
+        for level in ("low", "medium", "high"):
+            assert self._effort("hy3", level) == level
+
+    def test_disabled_omits_effort(self):
+        kw = _cc().build_kwargs(
+            model="hy4",
+            messages=[{"role": "user", "content": "hi"}],
+            is_tokenhub=True,
+            reasoning_config={"enabled": False},
+        )
+        assert "reasoning_effort" not in kw
 
 
 class TestCodexUltraForEveryModel:

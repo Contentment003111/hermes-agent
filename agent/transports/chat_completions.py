@@ -586,7 +586,7 @@ class ChatCompletionsTransport(ProviderTransport):
                 else clamp_effort(_e, _supported, KIMI_K3_OVERRIDES if is_k3 else None)
             )
         if params.get("is_tokenhub", False) and not thinking_off:
-            api_kwargs["reasoning_effort"] = tokenhub_effort(_e)
+            api_kwargs["reasoning_effort"] = tokenhub_effort(_e, model)
 
         extra_body: dict[str, Any] = {}
         is_openrouter = params.get("is_openrouter", False)

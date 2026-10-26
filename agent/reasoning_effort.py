@@ -67,6 +67,13 @@ OX_ALPHA_OVERRIDES: dict[str, str] = {"xhigh": "max"}
 TOKENHUB_EFFORTS: tuple[str, ...] = ("low", "medium", "high")
 NEBIUS_EFFORTS: tuple[str, ...] = ("low", "medium", "high")
 SOLAR_EFFORTS: tuple[str, ...] = ("low", "medium", "high")
+#: Hy4 preview narrows TokenHub's knob to ``high`` only — ``low``/``medium`` are not in its
+#: documented set, and ``none`` is the disable path callers already handle by omitting the field
+#: (Tencent's deep-thinking table, accessed 2026-10-21:
+#: https://cloud.tencent.com/document/product/1823/131208). Stable Hy4 adds a ``max`` rung on top.
+#: Hy3 keeps the wider low/medium/high ladder.
+TOKENHUB_HY4_PREVIEW_EFFORTS: tuple[str, ...] = ("high",)
+TOKENHUB_HY4_EFFORTS: tuple[str, ...] = ("high", "max")
 
 #: GLM-5.2 native knob: exactly ``high`` (its minimum thinking level) and ``max``; GLM-5.3
 #: widens it to a graded scale (live-verified, monotonic). ``xhigh`` requests the top tier.
@@ -191,11 +198,28 @@ def requested_effort(reasoning_config: Optional[dict]) -> Optional[str]:
     return str(reasoning_config.get("effort") or "").strip().lower() or None
 
 
-def tokenhub_effort(requested: Optional[str]) -> str:
+def tokenhub_supported_efforts(model: Optional[str]) -> tuple[str, ...]:
+    """Supported effort set for a TokenHub / Token Plan model id.
+
+    Stable Hy4 publishes ``high`` and ``max``; Hy4 preview stops at ``high`` (``none`` is the
+    disable path on both). Everything else on the host keeps the low/medium/high ladder. The
+    preview check runs first — a bare ``startswith("hy4")`` would hand preview the ``max`` rung
+    its API rejects. Ids arrive bare or ``vendor/``-prefixed.
+    """
+    bare = (model or "").strip().lower().rsplit("/", 1)[-1]
+    if bare.startswith("hy4-preview"):
+        return TOKENHUB_HY4_PREVIEW_EFFORTS
+    return TOKENHUB_HY4_EFFORTS if bare.startswith("hy4") else TOKENHUB_EFFORTS
+
+
+def tokenhub_effort(requested: Optional[str], model: Optional[str] = None) -> str:
     """TokenHub's top-level ``reasoning_effort``: ``high`` when no level was chosen, else the
-    request clamped to low/medium/high. Shared by the tencent-tokenhub profile and the host-based
-    branch base_url-only agents take; callers handle thinking-off themselves."""
-    return "high" if requested is None else clamp_effort(requested, TOKENHUB_EFFORTS)
+    request clamped to the model's supported set (low/medium/high, or ``high`` alone on Hy4).
+    Shared by the tencent-tokenhub profile and the host-based branch base_url-only agents take;
+    callers handle thinking-off themselves."""
+    if requested is None:
+        return "high"
+    return clamp_effort(requested, tokenhub_supported_efforts(model))
 
 
 def generic_nested_reasoning(reasoning_config: Optional[dict]) -> dict:
